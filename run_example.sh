@@ -1,0 +1,1 @@
+python3 .\image_to_tree.py -i example/example_in.png -o example/example_out.fcml -t 40 -s 60 -p 20 -k 2 -b 0.75 -c 0.02 --min-line-length-multiplier 3 --max-line-length-multiplier 15 -a 1000
