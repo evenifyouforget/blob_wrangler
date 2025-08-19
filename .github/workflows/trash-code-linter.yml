@@ -1,0 +1,143 @@
+# .github/workflows/conservative-lint.yml
+name: Lint, but only flag trash code
+
+on:
+  push:
+    branches:
+      - main # Runs on pushes to the main branch
+  pull_request:
+    branches:
+      - main # Runs on pull requests targeting the main branch
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest # Uses the latest Ubuntu environment for the runner
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4 # Checks out your repository code
+
+    - name: Set up Python
+      uses: actions/setup-python@v5 # Sets up a Python environment
+      with:
+        python-version: '3.x' # Uses the latest Python 3 version available
+
+    - name: Install Linters
+      # Installs all necessary linters.
+      # flake8, jsonlint, and cpplint are Python packages.
+      # shellcheck is installed via apt-get.
+      # markdownlint-cli is installed via npm.
+      run: |
+        pip install flake8 jsonlint cpplint
+        sudo apt-get update && sudo apt-get install -y shellcheck
+        npm install -g markdownlint-cli
+
+    - name: Initialize report file
+      # Creates an empty markdown file to store linter outputs.
+      run: |
+        echo "# Conservative Linter Report" > linter_report.md
+        echo "" >> linter_report.md
+
+    - name: Run Flake8 (Python & SCons files)
+      # Flake8 is used for Python code, which will also cover your SCons files
+      # as they are Python scripts.
+      #
+      # Configuration for flake8 is set to be very lenient:
+      # --max-line-length=120: Allows lines up to 120 characters, which is more forgiving.
+      # --ignore=...: A broad list of common error codes are ignored,
+      #               focusing only on more critical syntax or logic errors.
+      #               E.g., E501 (line length, though set higher here), W503 (binary operator line break),
+      #               E203 (whitespace before colon), F401 (unused import), F841 (unused variable).
+      # --exclude=...: Ignores common generated directories.
+      # 2>&1 | tee -a linter_report.md: Redirects both stdout and stderr to the report file
+      # and also to the console output (tee).
+      run: |
+        echo "## Flake8 Report (Python & SCons)" >> linter_report.md
+        flake8 . \
+          --max-line-length=120 \
+          --ignore=E501,W503,E203,E701,E702,E703,E704,E711,E712,E722,W605,F401,F841 \
+          --exclude=.git,__pycache__,build,dist \
+          2>&1 | tee -a linter_report.md
+        # Check the exit code of the last command ($?) to see if errors were found.
+        if [ $? -ne 0 ]; then
+          echo "**Flake8 found issues.**" >> linter_report.md
+        else
+          echo "No Flake8 issues found." >> linter_report.md
+        fi
+        echo "" >> linter_report.md
+      continue-on-error: true # Allows other linter steps to run even if this one fails
+
+    - name: Run Cpplint (C++)
+      # cpplint is configured to be very conservative.
+      # --verbose=0: Only reports errors, not warnings.
+      # --filter=-...: Disables many common stylistic checks,
+      #                focusing on more severe issues like build problems or potential runtime errors.
+      #                The filters specifically exclude common formatting, naming, and legal checks.
+      run: |
+        echo "## Cpplint Report (C++)" >> linter_report.md
+        find . -name "*.cpp" -o -name "*.cc" -o -name "*.h" -o -name "*.hpp" | \
+          xargs cpplint \
+            --verbose=0 \
+            --filter=-whitespace/line_length,-whitespace/indent,-whitespace/braces,-readability/casting,-readability/todo,-readability/alt_tokens,-build/include_order,-legal/copyright,-naming/class,-naming/enum,-naming/function,-naming/variable \
+            -- 2>&1 | tee -a linter_report.md
+        if [ $? -ne 0 ]; then
+          echo "**Cpplint found issues.**" >> linter_report.md
+        else
+          echo "No Cpplint issues found." >> linter_report.md
+        fi
+        echo "" >> linter_report.md
+      continue-on-error: true # Allows other linter steps to run even if this one fails
+
+    - name: Run Shellcheck (Bash)
+      # Shellcheck is generally conservative by default, focusing on syntax errors,
+      # common logical pitfalls, and security issues in shell scripts.
+      # It's a good tool for catching "horrendous" bash issues.
+      run: |
+        echo "## Shellcheck Report (Bash)" >> linter_report.md
+        find . -name "*.sh" -o -name "*.bash" | xargs shellcheck 2>&1 | tee -a linter_report.md
+        if [ $? -ne 0 ]; then
+          echo "**Shellcheck found issues.**" >> linter_report.md
+        else
+          echo "No Shellcheck issues found." >> linter_report.md
+        fi
+        echo "" >> linter_report.md
+      continue-on-error: true # Allows other linter steps to run even if this one fails
+
+    - name: Run Markdownlint (Markdown)
+      # Markdownlint is configured to ignore most stylistic rules (like line length,
+      # inline HTML, blank lines around elements) but will still flag issues
+      # that significantly impact readability or rendering.
+      run: |
+        echo "## Markdownlint Report (Markdown)" >> linter_report.md
+        markdownlint \
+          --disable MD013,MD033,MD040,MD007,MD009,MD024,MD026,MD029,MD030,MD031,MD032,MD034,MD036,MD037,MD038,MD039,MD041,MD043,MD044,MD046,MD047 \
+          $(find . -name "*.md") 2>&1 | tee -a linter_report.md
+        if [ $? -ne 0 ]; then
+          echo "**Markdownlint found issues.**" >> linter_report.md
+        else
+          echo "No Markdownlint issues found." >> linter_report.md
+        fi
+        echo "" >> linter_report.md
+      continue-on-error: true # Allows other linter steps to run even if this one fails
+
+    - name: Run JSON Lint (JSON)
+      # jsonlint checks for valid JSON syntax, which is a fundamental "sanity check"
+      # for your JSON files. It will fail if the JSON is malformed.
+      run: |
+        echo "## JSON Lint Report (JSON)" >> linter_report.md
+        find . -name "*.json" | xargs -r jsonlint -q 2>&1 | tee -a linter_report.md
+        if [ $? -ne 0 ]; then
+          echo "**JSON Lint found issues.**" >> linter_report.md
+        else
+          echo "No JSON Lint issues found." >> linter_report.md
+        fi
+        echo "" >> linter_report.md
+      continue-on-error: true # Allows other linter steps to run even if this one fails
+
+    - name: Consolidate and Publish Linter Report
+      # This step reads the generated linter_report.md and publishes its content
+      # to the workflow run summary for easy viewing.
+      # The `failure()` expression ensures this step runs even if previous steps fail.
+      if: always()
+      run: |
+        cat linter_report.md >> $GITHUB_STEP_SUMMARY

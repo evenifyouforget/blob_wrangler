@@ -1,0 +1,49 @@
+# This workflow checks Python typing issues using Mypy.
+# It runs automatically on every push to the main branch and for every pull request,
+# providing inline annotations for type errors directly in the pull request view.
+# Mypy's strictness is configured via the 'mypy.ini' file in your repository root.
+
+name: Mypy Type Check
+
+on:
+  push:
+    # Triggers the workflow when code is pushed to the 'main' branch
+    branches: [ "main" ]
+  pull_request:
+    # Triggers the workflow when a pull request is opened or updated targeting 'main'
+    branches: [ "main" ]
+
+jobs:
+  # Define a job named 'run-mypy'
+  run-mypy:
+    # Specifies that the job should run on the latest Ubuntu runner
+    runs-on: ubuntu-latest
+
+    # Steps define the sequence of tasks executed in this job
+    steps:
+      # Step 1: Checkout the repository code
+      # This action allows your workflow to access the code in your repository.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up a Python environment
+      # This action installs Python 3.9 for the build environment.
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      # Step 3: Install project dependencies
+      # This step upgrades pip and installs dependencies from requirements.txt if present.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      # Step 4: Run Mypy using a dedicated GitHub Action
+      # This action will now pick up its configuration from the 'mypy.ini' file.
+      - name: Run Mypy with Annotations (Configured by mypy.ini)
+        # Using 'releases/v1.3' which is the latest stable release tag available for this action
+        uses: sasanquaneuf/mypy-github-action@releases/v1.3
